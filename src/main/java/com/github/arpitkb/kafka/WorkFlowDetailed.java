@@ -8,24 +8,31 @@ import org.apache.kafka.streams.kstream.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 public class WorkFlowDetailed {
     public static void main(String[] args) {
 
         Logger logger = LoggerFactory.getLogger(WorkFlowCount.class);
+        final String inputTopic = "input-002";
+        final String outputTopic = "output-001";
 
         Properties props = new Properties();
         props.putIfAbsent(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG,"localhost:9092");
-        props.putIfAbsent(StreamsConfig.APPLICATION_ID_CONFIG,"stat-stream");
+        props.putIfAbsent(StreamsConfig.APPLICATION_ID_CONFIG,"statStream");
 
         final StreamsBuilder builder = new StreamsBuilder();
-        KStream<String,WorkFlow> input = builder.stream("workflows-input", Consumed.with(Serdes.String(), WorkflowSerde.WorkFlow()));
+        KStream<String,WorkFlow> input = builder.stream(inputTopic, Consumed.with(Serdes.String(), WorkflowSerde.WorkFlow()));
 
 
         // build topology
-        KGroupedStream<String,WorkFlow> in2 = input.selectKey((k,v)->v.getName()).groupByKey(Grouped.with(Serdes.String(),WorkflowSerde.WorkFlow()));
-        KTable<String,WorkFlowStat> output = in2.aggregate(
+        KStream<String,WorkFlow> in2 = input.filter((k, v)->v.getParentId() == null);
+        KStream<String,WorkFlow> in3 = in2.merge(in2.flatMapValues(v->v.getNodes()));
+
+        KGroupedStream<String,WorkFlow> in4 =  in3.selectKey((k,v)->v.getName()).groupByKey(Grouped.with(Serdes.String() , WorkflowSerde.WorkFlow()));
+
+        KTable<String,WorkFlowStat> output = in4.aggregate(
                 ()-> new WorkFlowStat("temp",0L,0L,0L),
                 (k,v,agg)-> {
                     if(v.getStatus().equals("Success")) agg.setSucc_count(agg.getSucc_count()+1);
@@ -37,7 +44,7 @@ public class WorkFlowDetailed {
 
                 Materialized.with(Serdes.String(),WorkflowSerde.WorkFlowStat())
         );
-        output.toStream().to("workflows-status",Produced.with(Serdes.String(),WorkflowSerde.WorkFlowStat()));
+        output.toStream().to(outputTopic,Produced.with(Serdes.String(),WorkflowSerde.WorkFlowStat()));
 
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(),props);
@@ -51,7 +58,7 @@ public class WorkFlowDetailed {
             System.exit(1);
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread("input-stream"){
+        Runtime.getRuntime().addShutdownHook(new Thread("inputStream"){
             @Override
             public void run(){
                 kafkaStreams.close();
