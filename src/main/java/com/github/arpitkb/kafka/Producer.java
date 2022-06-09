@@ -13,7 +13,7 @@ import java.util.Properties;
 public class Producer {
 
     public static void main(String[] args) {
-        String topic = "workflows-input";
+        String topic = "input-002";
         Logger logger = LoggerFactory.getLogger(Producer.class);
 
 
@@ -26,8 +26,8 @@ public class Producer {
         KafkaProducer<String,WorkFlow> producer=new KafkaProducer<>(properties);
 
 
-         for(int i=0;i<100;i++){
-             int rand = 1+(int)Math.floor(Math.random()*5);
+         for(int i=0;i<9000;i++){
+             int rand = 1+(int)Math.floor(Math.random()*15);
              int rand2 = (int)Math.floor(Math.random()*2);
 
              String name = "workflow "+rand;
@@ -35,6 +35,12 @@ public class Producer {
              String id = "w"+rand+"-"+rand+".0";
 
             WorkFlow workFlow = new WorkFlow(id,name,status);
+
+             int rand3 = 16+(int)Math.floor(Math.random()*8);
+             for(int j=16;j<rand3;j++){
+                 WorkFlow node = new WorkFlow("child_"+i ,"workflow "+j,"Success");
+                 workFlow.addChild(node);
+             }
 
 
             ProducerRecord<String,WorkFlow> record = new ProducerRecord<>(topic,workFlow.getName(),workFlow);
